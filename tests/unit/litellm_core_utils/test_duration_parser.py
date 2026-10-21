@@ -405,5 +405,82 @@ def test_a_month_starting_now_matches_duration_in_seconds():
         assert duration_in_seconds("1mo") == duration_in_seconds_from(now, "1mo")
 
 
+@pytest.mark.parametrize(
+    "duration,expected",
+    (
+        ("48h", datetime(2026, 10, 23, tzinfo=timezone.utc)),
+        ("49h", datetime(2026, 10, 23, 1, tzinfo=timezone.utc)),
+        ("72h", datetime(2026, 10, 24, tzinfo=timezone.utc)),
+        ("2880m", datetime(2026, 10, 23, 15, tzinfo=timezone.utc)),
+        ("3000m", datetime(2026, 10, 23, 17, tzinfo=timezone.utc)),
+        ("4320m", datetime(2026, 10, 24, 15, tzinfo=timezone.utc)),
+        ("172800s", datetime(2026, 10, 23, 15, 20, tzinfo=timezone.utc)),
+        ("180000s", datetime(2026, 10, 23, 17, 20, tzinfo=timezone.utc)),
+        ("259200s", datetime(2026, 10, 24, 15, 20, tzinfo=timezone.utc)),
+    ),
+)
+def test_standardized_reset_retains_every_elapsed_day(duration: str, expected: datetime) -> None:
+    now: Final = datetime(2026, 10, 21, 15, 20, 30, 123456, tzinfo=timezone.utc)
+    assert get_next_standardized_reset_time(duration, now, "UTC") == expected
+
+
+@pytest.mark.parametrize(
+    "duration,start,timezone_name,expected",
+    (
+        (
+            "48h",
+            datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+            "UTC",
+            datetime(2027, 1, 2, tzinfo=timezone.utc),
+        ),
+        (
+            "2880m",
+            datetime(2028, 2, 28, 23, 59, 59, tzinfo=timezone.utc),
+            "UTC",
+            datetime(2028, 3, 1, 23, tzinfo=timezone.utc),
+        ),
+        (
+            "172800s",
+            datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+            "UTC",
+            datetime(2027, 1, 2, 23, 59, tzinfo=timezone.utc),
+        ),
+        (
+            "49h",
+            datetime(2026, 10, 21, 15, 20, 30, tzinfo=timezone.utc),
+            "Asia/Kolkata",
+            datetime(2026, 10, 23, 1, tzinfo=ZoneInfo("Asia/Kolkata")),
+        ),
+    ),
+)
+def test_multi_day_reset_preserves_calendar_rollover_and_timezone(
+    duration: str, start: datetime, timezone_name: str, expected: datetime
+) -> None:
+    assert get_next_standardized_reset_time(duration, start, timezone_name) == expected
+
+
+@pytest.mark.parametrize("duration", ("1ms", "1hr", "1h30m", "1d2h", "1mojunk", "1h\n", "1h!", "1m0"))
+def test_fixed_duration_rejects_partial_matches(duration: str) -> None:
+    start: Final = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    with pytest.raises(ValueError):
+        duration_in_seconds(duration)
+    with pytest.raises(ValueError):
+        duration_in_seconds_from(start, duration)
+
+
+@pytest.mark.parametrize("duration", ("2h30m", "1d2h", "7dextra1", "30d!", "2h\n"))
+def test_invalid_reset_expression_uses_legacy_fallback_instead_of_a_prefix(duration: str) -> None:
+    start: Final = datetime(2026, 10, 21, 15, 20, 30, tzinfo=timezone.utc)
+    expected: Final = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    assert get_next_standardized_reset_time(duration, start, "UTC") == expected
+    assert get_budget_window_start(duration, expected) == datetime(2026, 10, 21, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("duration", ("0h", "0m", "0s"))
+def test_zero_sub_day_interval_keeps_existing_immediate_reset(duration: str) -> None:
+    start: Final = datetime(2026, 10, 21, 15, 20, 30, 123456, tzinfo=timezone.utc)
+    assert get_next_standardized_reset_time(duration, start, "UTC") == start
+
+
 if __name__ == "__main__":
     unittest.main()

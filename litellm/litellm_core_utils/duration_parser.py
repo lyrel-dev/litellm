@@ -27,7 +27,7 @@ def _normalize_duration(duration: str) -> str:
 
 
 def _extract_from_regex(duration: str) -> tuple[int, str]:
-    match: Final = re.match(r"(\d+)(mo|[smhdw]?)", duration)
+    match: Final = re.fullmatch(r"(\d+)(mo|[smhdw]?)", duration)
 
     if not match:
         raise ValueError("Invalid duration format")
@@ -112,7 +112,7 @@ def get_next_standardized_reset_time(
     - Nd: If N=1, reset at the next `reset_time_of_day`; if N>1, reset every N days from now
     - Nh: Every N hours, aligned to hour boundaries (e.g., 1:00, 2:00)
     - Nm: Every N minutes, aligned to minute boundaries (e.g., 1:05, 1:10)
-    - Ns: Every N seconds, aligned to second boundaries
+    - Ns: Every N seconds, aligned to second boundaries (e.g., 0, 15, 30, 45)
 
     Parameters:
     - duration: Duration string (e.g. "30s", "30m", "30h", "30d")
@@ -216,7 +216,7 @@ def _setup_timezone(current_time: datetime, timezone_str: str = "UTC") -> tuple[
 
 def _parse_duration(duration: str) -> tuple[int | None, str | None]:
     """Parse the duration string into value and unit."""
-    match: Final = re.match(r"(\d+)([a-z]+)", duration)
+    match: Final = re.fullmatch(r"(\d+)([a-z]+)", duration)
     if not match:
         return None, None
 
@@ -297,9 +297,9 @@ def _handle_hour_reset(current_time: datetime, base_midnight: datetime, value: i
 
     # Handle overnight case
     if next_hour >= 24:
-        next_hour = next_hour % 24
-        next_day: Final = base_midnight + timedelta(days=1)
-        return next_day.replace(hour=next_hour)
+        elapsed_days, hour_of_day = divmod(next_hour, 24)
+        next_day: Final = base_midnight + timedelta(days=elapsed_days)
+        return next_day.replace(hour=hour_of_day)
 
     return current_time.replace(hour=next_hour, minute=0, second=0, microsecond=0)
 
@@ -331,9 +331,9 @@ def _handle_minute_reset(current_time: datetime, base_midnight: datetime, value:
 
     # Handle overnight case
     if next_hour >= 24:
-        next_hour = next_hour % 24
-        next_day: Final = base_midnight + timedelta(days=1)
-        return next_day.replace(hour=next_hour, minute=next_minute, second=0, microsecond=0)
+        elapsed_days, hour_of_day = divmod(next_hour, 24)
+        next_day: Final = base_midnight + timedelta(days=elapsed_days)
+        return next_day.replace(hour=hour_of_day, minute=next_minute, second=0, microsecond=0)
 
     return current_time.replace(hour=next_hour, minute=next_minute, second=0, microsecond=0)
 
@@ -370,9 +370,9 @@ def _handle_second_reset(current_time: datetime, base_midnight: datetime, value:
 
     # Handle overnight case
     if next_hour >= 24:
-        next_hour = next_hour % 24
-        next_day: Final = base_midnight + timedelta(days=1)
-        return next_day.replace(hour=next_hour, minute=next_minute, second=next_second, microsecond=0)
+        elapsed_days, hour_of_day = divmod(next_hour, 24)
+        next_day: Final = base_midnight + timedelta(days=elapsed_days)
+        return next_day.replace(hour=hour_of_day, minute=next_minute, second=next_second, microsecond=0)
 
     return current_time.replace(hour=next_hour, minute=next_minute, second=next_second, microsecond=0)
 
